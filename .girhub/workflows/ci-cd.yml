@@ -1,0 +1,56 @@
+name: Vue CI/CD Pipeline
+
+# 触发规则：推送到 main 分支走完整 CI+CD；提 PR 只跑 CI 检查；支持手动触发
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+# 部署 GitHub Pages 必需的权限配置
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  # CI 任务：拉取代码 → 装环境 → 装依赖 → 构建
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出仓库代码
+        uses: actions/checkout@v4
+
+      - name: 配置 Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: 安装项目依赖
+        run: npm ci
+
+      - name: 执行生产环境构建
+        run: npm run build
+
+      - name: 上传构建产物供部署使用
+        uses: actions/upload-pages-artifact@v3
+        with:
+          name: github-pages
+          path: ./dist
+
+  # CD 任务：构建成功后自动部署到 GitHub Pages
+  deploy:
+    needs: build  # 必须等 build 任务成功完成，才会执行部署
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' # 只有 main 分支的代码才触发部署
+    
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    
+    steps:
+      - name: 部署到 GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
